@@ -6,10 +6,25 @@
   <script src="/socket.io/socket.io.js"></script>
   <style>
     body { font-family: sans-serif; padding: 20px; background-color: #f4f4f9; }
-    .card { display: inline-block; padding: 10px 15px; margin: 5px; border: 1px solid #333; background: #fff; cursor: pointer; border-radius: 5px; }
-    .card.selected { background: #ffd700; font-weight: bold; }
-    #board { border: 2px dashed #888; padding: 20px; margin: 20px 0; background: #fff; min-height: 80px; }
-    .btn { padding: 8px 16px; margin-right: 5px; cursor: pointer; }
+    .card {
+      display: inline-block;
+      width: 40px;
+      height: 60px;
+      line-height: 60px;
+      text-align: center;
+      margin: 5px;
+      border: 2px solid #333;
+      background: #fff;
+      font-weight: bold;
+      font-size: 18px;
+      cursor: pointer;
+      border-radius: 6px;
+      user-select: none;
+    }
+    .card.selected { background: #ffd700; border-color: #d4af37; transform: translateY(-5px); }
+    #board { border: 2px dashed #888; padding: 20px; margin: 20px 0; background: #fff; min-height: 60px; }
+    .btn { padding: 10px 20px; font-size: 14px; margin-right: 5px; cursor: pointer; }
+    .btn:disabled { background-color: #ccc; cursor: not-allowed; }
   </style>
 </head>
 <body>
@@ -23,6 +38,8 @@
   <div id="game-area" style="display:none;">
     <h3>접속자 목록</h3>
     <ul id="player-list"></ul>
+    
+    <!-- 게임 시작 후 숨겨질 버튼 -->
     <button class="btn" id="start-btn" onclick="startGame()">게임 시작</button>
 
     <div id="board">
@@ -41,8 +58,8 @@
 
   <script>
     const socket = io();
-    let myHand = [];
-    let selectedCards = [];
+    let selectedIndices = [];
+    let myHandCards = [];
 
     function join() {
       const nick = document.getElementById('nickname').value;
@@ -60,58 +77,82 @@
     socket.on('updateRoom', (room) => {
       const list = document.getElementById('player-list');
       list.innerHTML = room.players.map(p => `<li>${p.name}</li>`).join('');
+      
+      // 게임 중이면 시작 버튼 숨기기
+      if (room.gameStarted) {
+        document.getElementById('start-btn').style.display = 'none';
+      } else {
+        document.getElementById('start-btn').style.display = 'inline-block';
+      }
     });
 
-    socket.on('gameStarted', (room) => {
-      alert('게임이 시작되었습니다!');
+    socket.on('gameStarted', () => {
+      document.getElementById('start-btn').style.display = 'none';
     });
 
     socket.on('turnUpdate', (data) => {
-      document.getElementById('turn-info').innerText = `현재 차례: ${data.turnPlayer.name}`;
+      document.getElementById('turn-info').innerText = `현재 차례: ${data.turnPlayerName}`;
       
       if (data.lastPlay) {
-        document.getElementById('last-card').innerText = 
-          `${data.lastPlay.player} 님이 낸 카트 : 계급 ${data.lastPlay.rank} (${data.lastPlay.count}장)`;
+        const cardDisplay = data.lastPlay.cards.map(c => `[${c === 13 ? '어리광대' : c}]`).join(' ');
+        document.getElementById('last-card').innerHTML = 
+          `<b>${data.lastPlay.player}</b> 님이 냄: ${cardDisplay} (계급 ${data.lastPlay.rank}, ${data.lastPlay.count}장)`;
       } else {
         document.getElementById('last-card').innerText = '선(새 라운드 시작)';
       }
-
-      // 내 손패 갱신
-      const me = data.players.find(p => p.id === socket.id);
-      // 서버에서 내 실제 hand 정보를 받기 위해 내 ID 필터링
-      socket.emit('getMyHand');
     });
 
-    // 카드 선택 토글
-    function toggleSelect(index, rank) {
-      const cardEl = document.getElementById(`card-${index}`);
-      if (cardEl.classList.contains('selected')) {
-        cardEl.classList.remove('selected');
-        const pos = selectedCards.indexOf(rank);
-        if (pos > -1) selectedCards.splice(pos, 1);
+    // 서버로부터 내 최신 손패를 받아서 화면에 렌더링
+    socket.on('updateMyHand', (hand) => {
+      myHandCards = hand;
+      selectedIndices = [];
+      renderMyHand();
+    });
+
+    function renderMyHand() {
+      const container = document.getElementById('my-hand');
+      container.innerHTML = '';
+      
+      myHandCards.forEach((cardRank, index) => {
+        const cardEl = document.createElement('div');
+        cardEl.className = 'card' + (selectedIndices.includes(index) ? ' selected' : '');
+        cardEl.innerText = cardRank === 13 ? '🤡' : cardRank;
+        cardEl.onclick = () => toggleSelect(index);
+        container.appendChild(cardEl);
+      });
+    }
+
+    function toggleSelect(index) {
+      const pos = selectedIndices.indexOf(index);
+      if (pos > -1) {
+        selectedIndices.splice(pos, 1);
       } else {
-        cardEl.classList.add('selected');
-        selectedCards.push(rank);
+        selectedIndices.push(index);
       }
+      renderMyHand();
     }
 
     function playSelectedCards() {
-      if (selectedCards.length === 0) return;
-      socket.emit('playCards', selectedCards);
-      selectedCards = [];
+      if (selectedIndices.length === 0) return;
+      
+      const cardsToPlay = selectedIndices.map(i => myHandCards[i]);
+      socket.emit('playCards', cardsToPlay);
+      selectedIndices = [];
     }
 
     function passTurn() {
       socket.emit('passTurn');
-      selectedCards = [];
+      selectedIndices = [];
+      renderMyHand();
     }
 
     socket.on('errorMessage', (msg) => {
       alert(msg);
     });
 
-    socket.on('chat', (msg) => {
-      console.log(msg);
+    socket.on('gameOver', (rankings) => {
+      alert('게임 종료!');
+      document.getElementById('start-btn').style.display = 'inline-block';
     });
   </script>
 </body>
