@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>웹 달무티</title>
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    body { font-family: sans-serif; padding: 20px; background-color: #f4f4f9; }
+    .card { display: inline-block; padding: 10px 15px; margin: 5px; border: 1px solid #333; background: #fff; cursor: pointer; border-radius: 5px; }
+    .card.selected { background: #ffd700; font-weight: bold; }
+    #board { border: 2px dashed #888; padding: 20px; margin: 20px 0; background: #fff; min-height: 80px; }
+    .btn { padding: 8px 16px; margin-right: 5px; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <h1>👑 온라인 달무티</h1>
+
+  <div id="login-area">
+    <input type="text" id="nickname" placeholder="닉네임 입력">
+    <button class="btn" onclick="join()">입장하기</button>
+  </div>
+
+  <div id="game-area" style="display:none;">
+    <h3>접속자 목록</h3>
+    <ul id="player-list"></ul>
+    <button class="btn" id="start-btn" onclick="startGame()">게임 시작</button>
+
+    <div id="board">
+      <h4>현재 바닥에 깔린 카드:</h4>
+      <div id="last-card">없음</div>
+    </div>
+
+    <h3 id="turn-info"></h3>
+
+    <h4>내 손패:</h4>
+    <div id="my-hand"></div>
+    <br>
+    <button class="btn" onclick="playSelectedCards()">선택한 카드 내기</button>
+    <button class="btn" onclick="passTurn()">패스하기</button>
+  </div>
+
+  <script>
+    const socket = io();
+    let myHand = [];
+    let selectedCards = [];
+
+    function join() {
+      const nick = document.getElementById('nickname').value;
+      if (nick) {
+        socket.emit('joinGame', nick);
+        document.getElementById('login-area').style.display = 'none';
+        document.getElementById('game-area').style.display = 'block';
+      }
+    }
+
+    function startGame() {
+      socket.emit('startGame');
+    }
+
+    socket.on('updateRoom', (room) => {
+      const list = document.getElementById('player-list');
+      list.innerHTML = room.players.map(p => `<li>${p.name}</li>`).join('');
+    });
+
+    socket.on('gameStarted', (room) => {
+      alert('게임이 시작되었습니다!');
+    });
+
+    socket.on('turnUpdate', (data) => {
+      document.getElementById('turn-info').innerText = `현재 차례: ${data.turnPlayer.name}`;
+      
+      if (data.lastPlay) {
+        document.getElementById('last-card').innerText = 
+          `${data.lastPlay.player} 님이 낸 카트 : 계급 ${data.lastPlay.rank} (${data.lastPlay.count}장)`;
+      } else {
+        document.getElementById('last-card').innerText = '선(새 라운드 시작)';
+      }
+
+      // 내 손패 갱신
+      const me = data.players.find(p => p.id === socket.id);
+      // 서버에서 내 실제 hand 정보를 받기 위해 내 ID 필터링
+      socket.emit('getMyHand');
+    });
+
+    // 카드 선택 토글
+    function toggleSelect(index, rank) {
+      const cardEl = document.getElementById(`card-${index}`);
+      if (cardEl.classList.contains('selected')) {
+        cardEl.classList.remove('selected');
+        const pos = selectedCards.indexOf(rank);
+        if (pos > -1) selectedCards.splice(pos, 1);
+      } else {
+        cardEl.classList.add('selected');
+        selectedCards.push(rank);
+      }
+    }
+
+    function playSelectedCards() {
+      if (selectedCards.length === 0) return;
+      socket.emit('playCards', selectedCards);
+      selectedCards = [];
+    }
+
+    function passTurn() {
+      socket.emit('passTurn');
+      selectedCards = [];
+    }
+
+    socket.on('errorMessage', (msg) => {
+      alert(msg);
+    });
+
+    socket.on('chat', (msg) => {
+      console.log(msg);
+    });
+  </script>
+</body>
+</html>
