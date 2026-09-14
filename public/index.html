@@ -6,6 +6,7 @@
   <script src="/socket.io/socket.io.js"></script>
   <style>
     body { font-family: sans-serif; padding: 20px; background-color: #f4f4f9; }
+    
     .card {
       display: inline-block;
       width: 40px;
@@ -23,12 +24,67 @@
     }
     .card.selected { background: #ffd700; border-color: #d4af37; transform: translateY(-5px); }
     #board { border: 2px dashed #888; padding: 20px; margin: 20px 0; background: #fff; min-height: 60px; }
-    .btn { padding: 10px 20px; font-size: 14px; margin-right: 5px; cursor: pointer; }
-    .btn:disabled { background-color: #ccc; cursor: not-allowed; }
+    
+    .btn { padding: 10px 20px; font-size: 14px; margin-right: 5px; cursor: pointer; border-radius: 5px; border: 1px solid #ccc; background: #fff; }
+    .btn:hover { background: #eee; }
+    .btn-rule { background: #4a90e2; color: white; border: none; font-weight: bold; }
+    .btn-rule:hover { background: #357abd; }
+
+    /* 규칙 모달 창 스타일 */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.5);
+      z-index: 1000;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .modal-content {
+      background-color: #fff;
+      padding: 25px;
+      border-radius: 10px;
+      width: 80%;
+      max-width: 500px;
+      max-height: 70vh;
+      overflow-y: auto; /* 휠 스크롤 적용 */
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+      line-height: 1.6;
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 2px solid #ddd;
+      padding-bottom: 10px;
+      margin-bottom: 15px;
+    }
+
+    .modal-header h2 { margin: 0; }
+
+    .close-btn {
+      font-size: 24px;
+      font-weight: bold;
+      cursor: pointer;
+      border: none;
+      background: none;
+    }
+
+    .rule-section { margin-bottom: 15px; }
+    .rule-section h4 { margin-bottom: 5px; color: #333; }
+    .rule-section p, .rule-section ul { margin: 0; padding-left: 20px; color: #555; }
   </style>
 </head>
 <body>
-  <h1>👑 온라인 달무티</h1>
+  <div style="display: flex; justify-content: space-between; align-items: center;">
+    <h1>👑 온라인 달무티</h1>
+    <button class="btn btn-rule" onclick="openRules()">📖 게임 규칙</button>
+  </div>
 
   <div id="login-area">
     <input type="text" id="nickname" placeholder="닉네임 입력">
@@ -39,7 +95,6 @@
     <h3>접속자 목록</h3>
     <ul id="player-list"></ul>
     
-    <!-- 게임 시작 후 숨겨질 버튼 -->
     <button class="btn" id="start-btn" onclick="startGame()">게임 시작</button>
 
     <div id="board">
@@ -56,10 +111,70 @@
     <button class="btn" onclick="passTurn()">패스하기</button>
   </div>
 
+  <!-- 규칙 팝업 모달 -->
+  <div id="rule-modal" class="modal-overlay">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>📜 달무티 게임 규칙</h2>
+        <button class="close-btn" onclick="closeRules()">&times;</button>
+      </div>
+
+      <div class="rule-section">
+        <h4>1. 게임 목적</h4>
+        <p>손에 든 카드를 가장 먼저 전부 털어내는 사람이 승리합니다.</p>
+      </div>
+
+      <div class="rule-section">
+        <h4>2. 카드 구성 및 서열</h4>
+        <ul>
+          <li>숫자가 <b>작을수록 높은 계급</b>입니다 (1번이 가장 높음, 12번이 가장 낮음).</li>
+          <li>숫자 계급만큼 장수가 존재합니다 (예: 1번 1장, 2번 2장 ... 12번 12장).</li>
+          <li>🤡 어리광대(13번)는 2장 존재합니다.</li>
+        </ul>
+      </div>
+
+      <div class="rule-section">
+        <h4>3. 카드 내는 규칙</h4>
+        <ul>
+          <li>선(First Player)은 <b>원하는 숫자의 카드를 1장 이상</b> 낼 수 있습니다. (단, 모두 같은 숫자여야 함)</li>
+          <li>다음 사람은 앞 사람이 낸 카드와 <b>동일한 장수</b>의 카드를 내야 합니다.</li>
+          <li>다음 사람은 앞 사람이 낸 카드보다 <b>더 높은 계급(더 작은 숫자)</b>의 카드만 낼 수 있습니다.</li>
+          <li>낼 카드가 없거나 내고 싶지 않다면 <b>패스</b>할 수 있습니다.</li>
+        </ul>
+      </div>
+
+      <div class="rule-section">
+        <h4>4. 라운드 종료 및 승리</h4>
+        <p>모든 플레이어가 패스하고 마지막으로 카드를 낸 사람에게 선 권한이 넘어가며 새 라운드가 시작됩니다. 가장 먼저 손패를 털어낸 순서대로 등수가 결정됩니다.</p>
+      </div>
+
+      <div style="text-align: right; margin-top: 20px;">
+        <button class="btn" onclick="closeRules()">닫기</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     const socket = io();
     let selectedIndices = [];
     let myHandCards = [];
+
+    // 규칙 모달 열기 / 닫기
+    function openRules() {
+      document.getElementById('rule-modal').style.display = 'flex';
+    }
+
+    function closeRules() {
+      document.getElementById('rule-modal').style.display = 'none';
+    }
+
+    // 모달 바깥 배경 클릭 시 닫기
+    window.onclick = function(event) {
+      const modal = document.getElementById('rule-modal');
+      if (event.target === modal) {
+        closeRules();
+      }
+    };
 
     function join() {
       const nick = document.getElementById('nickname').value;
@@ -78,7 +193,6 @@
       const list = document.getElementById('player-list');
       list.innerHTML = room.players.map(p => `<li>${p.name}</li>`).join('');
       
-      // 게임 중이면 시작 버튼 숨기기
       if (room.gameStarted) {
         document.getElementById('start-btn').style.display = 'none';
       } else {
@@ -102,7 +216,6 @@
       }
     });
 
-    // 서버로부터 내 최신 손패를 받아서 화면에 렌더링
     socket.on('updateMyHand', (hand) => {
       myHandCards = hand;
       selectedIndices = [];
