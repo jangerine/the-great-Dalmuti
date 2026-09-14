@@ -28,16 +28,25 @@
     .btn { padding: 10px 20px; font-size: 14px; margin-right: 5px; cursor: pointer; border-radius: 5px; border: 1px solid #ccc; background: #fff; }
     .btn:hover { background: #eee; }
     .btn-rule { background: #4a90e2; color: white; border: none; font-weight: bold; }
-    .btn-rule:hover { background: #357abd; }
+    .btn-tax { background: #e67e22; color: white; border: none; font-weight: bold; }
 
-    /* 규칙 모달 창 스타일 */
+    .badge {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: bold;
+      margin-left: 5px;
+      background: #e0e0e0;
+    }
+    .badge-달무티 { background: #f1c40f; color: #000; }
+    .badge-농노 { background: #95a5a6; color: #fff; }
+
+    /* 모달 스타일 */
     .modal-overlay {
       display: none;
       position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
+      top: 0; left: 0; width: 100%; height: 100%;
       background-color: rgba(0, 0, 0, 0.5);
       z-index: 1000;
       justify-content: center;
@@ -51,30 +60,17 @@
       width: 80%;
       max-width: 500px;
       max-height: 70vh;
-      overflow-y: auto; /* 휠 스크롤 적용 */
+      overflow-y: auto;
       box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
       line-height: 1.6;
     }
 
     .modal-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      border-bottom: 2px solid #ddd;
-      padding-bottom: 10px;
-      margin-bottom: 15px;
+      display: flex; justify-content: space-between; align-items: center;
+      border-bottom: 2px solid #ddd; padding-bottom: 10px; margin-bottom: 15px;
     }
 
-    .modal-header h2 { margin: 0; }
-
-    .close-btn {
-      font-size: 24px;
-      font-weight: bold;
-      cursor: pointer;
-      border: none;
-      background: none;
-    }
-
+    .close-btn { font-size: 24px; font-weight: bold; cursor: pointer; border: none; background: none; }
     .rule-section { margin-bottom: 15px; }
     .rule-section h4 { margin-bottom: 5px; color: #333; }
     .rule-section p, .rule-section ul { margin: 0; padding-left: 20px; color: #555; }
@@ -97,6 +93,13 @@
     
     <button class="btn" id="start-btn" onclick="startGame()">게임 시작</button>
 
+    <!-- 세금 징수 안내 구역 -->
+    <div id="tax-banner" style="display:none; background: #fff3cd; border: 1px solid #ffeeba; padding: 15px; border-radius: 5px; margin: 10px 0;">
+      <h4>💰 세금 징수 단계</h4>
+      <p id="tax-status-text">농노들이 세금을 바쳤습니다. 달무티는 돌려줄 카드를 선택해 주세요.</p>
+      <button class="btn btn-tax" id="send-tax-btn" style="display:none;" onclick="returnTaxCards()">선택한 카드 농노에게 주기</button>
+    </div>
+
     <div id="board">
       <h4>현재 바닥에 깔린 카드:</h4>
       <div id="last-card">없음</div>
@@ -104,14 +107,16 @@
 
     <h3 id="turn-info"></h3>
 
-    <h4>내 손패:</h4>
+    <h4>내 손패 (<span id="my-title">평민</span>):</h4>
     <div id="my-hand"></div>
     <br>
-    <button class="btn" onclick="playSelectedCards()">선택한 카드 내기</button>
-    <button class="btn" onclick="passTurn()">패스하기</button>
+    <div id="play-controls">
+      <button class="btn" onclick="playSelectedCards()">선택한 카드 내기</button>
+      <button class="btn" onclick="passTurn()">패스하기</button>
+    </div>
   </div>
 
-  <!-- 규칙 팝업 모달 -->
+  <!-- 규칙 모달 -->
   <div id="rule-modal" class="modal-overlay">
     <div class="modal-content">
       <div class="modal-header">
@@ -120,15 +125,18 @@
       </div>
 
       <div class="rule-section">
-        <h4>1. 게임 목적</h4>
-        <p>손에 든 카드를 가장 먼저 전부 털어내는 사람이 승리합니다.</p>
+        <h4>1. 세금 시스템 (신분 제도)</h4>
+        <ul>
+          <li><b>대달무티 (1등):</b> 대농노에게 좋은 카드 2장을 받고, 원하지 않는 카드 2장을 넘겨줍니다.</li>
+          <li><b>소달무티 (2등):</b> 소농노에게 좋은 카드 1장을 받고, 원하지 않는 카드 1장을 넘겨줍니다.</li>
+          <li><b>농노:</b> 가진 카드 중 가장 좋은 카드(가장 작은 숫자)를 자동으로 상급자에게 헌납합니다.</li>
+        </ul>
       </div>
 
       <div class="rule-section">
         <h4>2. 카드 구성 및 서열</h4>
         <ul>
-          <li>숫자가 <b>작을수록 높은 계급</b>입니다 (1번이 가장 높음, 12번이 가장 낮음).</li>
-          <li>숫자 계급만큼 장수가 존재합니다 (예: 1번 1장, 2번 2장 ... 12번 12장).</li>
+          <li>숫자가 <b>작을수록 높은 계급</b>입니다 (1번이 가장 높음).</li>
           <li>🤡 어리광대(13번)는 2장 존재합니다.</li>
         </ul>
       </div>
@@ -136,17 +144,10 @@
       <div class="rule-section">
         <h4>3. 카드 내는 규칙</h4>
         <ul>
-          <li>선(First Player)은 <b>원하는 숫자의 카드를 1장 이상</b> 낼 수 있습니다. (단, 모두 같은 숫자여야 함)</li>
-          <li>다음 사람은 앞 사람이 낸 카드와 <b>동일한 장수</b>의 카드를 내야 합니다.</li>
-          <li>다음 사람은 앞 사람이 낸 카드보다 <b>더 높은 계급(더 작은 숫자)</b>의 카드만 낼 수 있습니다.</li>
-          <li>낼 카드가 없거나 내고 싶지 않다면 <b>패스</b>할 수 있습니다.</li>
-          <li>모든 플레이어가 패스하면 마지막으로 카드를 낸 사람이 선이 되어 다시 원하는 조합으로 새로 시작합니다.</li>
+          <li>선은 <b>동일한 숫자의 카드</b>를 1장 이상 낼 수 있습니다.</li>
+          <li>다음 사람은 앞 사람과 <b>동일한 장수</b> 및 <b>더 높은 계급(작은 숫자)</b>을 내야 합니다.</li>
+          <li>전원 패스 시 마지막으로 카드를 낸 사람이 선이 됩니다.</li>
         </ul>
-      </div>
-
-      <div class="rule-section">
-        <h4>4. 라운드 종료 및 승리</h4>
-        <p>가장 먼저 손패를 털어낸 순서대로 등수가 결정됩니다.</p>
       </div>
 
       <div style="text-align: right; margin-top: 20px;">
@@ -159,21 +160,11 @@
     const socket = io();
     let selectedIndices = [];
     let myHandCards = [];
+    let myRankTitle = '평민';
+    let currentPhase = 'WAITING';
 
-    function openRules() {
-      document.getElementById('rule-modal').style.display = 'flex';
-    }
-
-    function closeRules() {
-      document.getElementById('rule-modal').style.display = 'none';
-    }
-
-    window.onclick = function(event) {
-      const modal = document.getElementById('rule-modal');
-      if (event.target === modal) {
-        closeRules();
-      }
-    };
+    function openRules() { document.getElementById('rule-modal').style.display = 'flex'; }
+    function closeRules() { document.getElementById('rule-modal').style.display = 'none'; }
 
     function join() {
       const nick = document.getElementById('nickname').value;
@@ -184,26 +175,39 @@
       }
     }
 
-    function startGame() {
-      socket.emit('startGame');
-    }
+    function startGame() { socket.emit('startGame'); }
 
     socket.on('updateRoom', (room) => {
       const list = document.getElementById('player-list');
-      list.innerHTML = room.players.map(p => `<li>${p.name}</li>`).join('');
+      list.innerHTML = room.players.map(p => 
+        `<li>${p.name} <span class="badge ${p.rankTitle.includes('달무티')?'badge-달무티':p.rankTitle.includes('농노')?'badge-농노':''}">${p.rankTitle}</span></li>`
+      ).join('');
       
-      if (room.gameStarted) {
-        document.getElementById('start-btn').style.display = 'none';
+      document.getElementById('start-btn').style.display = room.gameStarted ? 'none' : 'inline-block';
+    });
+
+    socket.on('taxPhaseUpdate', (data) => {
+      currentPhase = 'TAX';
+      document.getElementById('tax-banner').style.display = 'block';
+      document.getElementById('play-controls').style.display = 'none';
+
+      const needsTaxReturn = data.pendingTax.includes(myRankTitle);
+      if (needsTaxReturn) {
+        const needCount = myRankTitle === '대달무티' ? 2 : 1;
+        document.getElementById('tax-status-text').innerText = 
+          `세금을 받았습니다! 농노에게 돌려줄 원하지 않는 카드 ${needCount}장을 선택해 주세요.`;
+        document.getElementById('send-tax-btn').style.display = 'inline-block';
       } else {
-        document.getElementById('start-btn').style.display = 'inline-block';
+        document.getElementById('tax-status-text').innerText = '달무티와 농노 간 세금 교환 작업 진행 중...';
+        document.getElementById('send-tax-btn').style.display = 'none';
       }
     });
 
-    socket.on('gameStarted', () => {
-      document.getElementById('start-btn').style.display = 'none';
-    });
-
     socket.on('turnUpdate', (data) => {
+      currentPhase = 'PLAYING';
+      document.getElementById('tax-banner').style.display = 'none';
+      document.getElementById('play-controls').style.display = 'block';
+
       document.getElementById('turn-info').innerText = `현재 차례: ${data.turnPlayerName}`;
       
       if (data.lastPlay) {
@@ -215,8 +219,10 @@
       }
     });
 
-    socket.on('updateMyHand', (hand) => {
-      myHandCards = hand;
+    socket.on('updateMyHand', (data) => {
+      myHandCards = data.hand;
+      myRankTitle = data.title;
+      document.getElementById('my-title').innerText = myRankTitle;
       selectedIndices = [];
       renderMyHand();
     });
@@ -244,9 +250,15 @@
       renderMyHand();
     }
 
+    function returnTaxCards() {
+      if (selectedIndices.length === 0) return;
+      const cardsToReturn = selectedIndices.map(i => myHandCards[i]);
+      socket.emit('returnTaxCards', cardsToReturn);
+      selectedIndices = [];
+    }
+
     function playSelectedCards() {
       if (selectedIndices.length === 0) return;
-      
       const cardsToPlay = selectedIndices.map(i => myHandCards[i]);
       socket.emit('playCards', cardsToPlay);
       selectedIndices = [];
@@ -258,16 +270,12 @@
       renderMyHand();
     }
 
-    socket.on('errorMessage', (msg) => {
-      alert(msg);
-    });
-
-    socket.on('chat', (msg) => {
-      console.log(msg);
-    });
+    socket.on('errorMessage', (msg) => alert(msg));
+    socket.on('chat', (msg) => console.log(msg));
 
     socket.on('gameOver', (rankings) => {
-      alert('게임 종료!');
+      const rankMsg = rankings.map((r, i) => `${i + 1}등: ${r.name} (${r.title})`).join('\n');
+      alert(`🏆 라운드 종료! 🏆\n\n${rankMsg}`);
       document.getElementById('start-btn').style.display = 'inline-block';
     });
   </script>
