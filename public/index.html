@@ -2,34 +2,86 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
-  <title>웹 달무티</title>
+  <title>온라인 달무티</title>
   <script src="/socket.io/socket.io.js"></script>
   <style>
-    body { font-family: sans-serif; padding: 20px; background-color: #f4f4f9; }
-    
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@600;900&display=swap');
+
+    body {
+      font-family: 'Noto Serif KR', serif;
+      padding: 20px;
+      background-color: #2b1d0c;
+      color: #f3e5ab;
+    }
+
+    h1, h2, h3, h4 { margin: 5px 0; }
+
+    /* 모던 보드게임 감성의 카드 스타일 */
     .card {
-      display: inline-block;
-      width: 40px;
-      height: 60px;
-      line-height: 60px;
-      text-align: center;
-      margin: 5px;
-      border: 2px solid #333;
+      display: inline-flex;
+      flex-direction: column;
+      justify-content: space-between;
+      align-items: center;
+      width: 70px;
+      height: 105px;
+      margin: 6px;
+      padding: 6px 4px;
+      border: 3px solid #8b5a2b;
+      background: linear-gradient(135deg, #fffcf0 0%, #f7e7ce 100%);
+      border-radius: 8px;
+      box-shadow: 2px 4px 8px rgba(0,0,0,0.5);
+      cursor: pointer;
+      user-select: none;
+      transition: all 0.2s ease;
+      color: #3e2723;
+      box-sizing: border-box;
+      position: relative;
+    }
+
+    .card:hover { transform: translateY(-8px); }
+    .card.selected {
+      border-color: #ff2a2a;
+      box-shadow: 0 0 12px #ff4d4d;
+      transform: translateY(-12px);
       background: #fff;
+    }
+
+    /* 상위 계급 카드의 특수 색상 (1~3번) */
+    .card[data-rank="1"] { border-color: #d4af37; background: linear-gradient(135deg, #fffdf0 0%, #ffe89e 100%); }
+    .card[data-rank="2"] { border-color: #c0c0c0; background: linear-gradient(135deg, #ffffff 0%, #e6e6e6 100%); }
+    .card[data-rank="3"] { border-color: #cd7f32; background: linear-gradient(135deg, #ffffff 0%, #f4d0b5 100%); }
+    /* 조커 카드 스타일 */
+    .card[data-rank="13"] { border-color: #9b59b6; background: linear-gradient(135deg, #f3e5f5 0%, #e1bee7 100%); }
+
+    .card-num { font-size: 22px; font-weight: 900; line-height: 1; }
+    .card-icon { font-size: 20px; margin: 2px 0; }
+    .card-title { font-size: 11px; font-weight: bold; text-align: center; word-break: keep-all; }
+
+    #board {
+      border: 3px solid #7a5230;
+      padding: 15px;
+      margin: 15px 0;
+      background: #1c1307;
+      border-radius: 10px;
+      min-height: 90px;
+    }
+
+    .btn {
+      padding: 8px 16px;
+      font-size: 14px;
+      font-family: inherit;
       font-weight: bold;
-      font-size: 18px;
+      margin-right: 5px;
       cursor: pointer;
       border-radius: 6px;
-      user-select: none;
+      border: 1px solid #7a5230;
+      background: #e6c594;
+      color: #3e2723;
     }
-    .card.selected { background: #ffd700; border-color: #d4af37; transform: translateY(-5px); }
-    #board { border: 2px dashed #888; padding: 20px; margin: 20px 0; background: #fff; min-height: 60px; }
-    
-    .btn { padding: 10px 20px; font-size: 14px; margin-right: 5px; cursor: pointer; border-radius: 5px; border: 1px solid #ccc; background: #fff; }
-    .btn:hover { background: #eee; }
-    .btn-rule { background: #4a90e2; color: white; border: none; font-weight: bold; }
-    .btn-tax { background: #e67e22; color: white; border: none; font-weight: bold; }
-    .btn-revolution { background: #e74c3c; color: white; border: none; font-weight: bold; animation: pulse 1.5s infinite; }
+    .btn:hover { background: #f5daaf; }
+    .btn-rule { background: #3498db; color: white; border: none; }
+    .btn-tax { background: #e67e22; color: white; border: none; }
+    .btn-revolution { background: #e74c3c; color: white; border: none; animation: pulse 1.5s infinite; }
 
     @keyframes pulse {
       0% { transform: scale(1); }
@@ -44,77 +96,76 @@
       font-size: 12px;
       font-weight: bold;
       margin-left: 5px;
-      background: #e0e0e0;
     }
-    .badge-달무티 { background: #f1c40f; color: #000; }
-    .badge-농노 { background: #95a5a6; color: #fff; }
+    .badge-달무티 { background: #d4af37; color: #000; }
+    .badge-농노 { background: #7f8c8d; color: #fff; }
 
+    /* 모달 디자인 */
     .modal-overlay {
       display: none;
       position: fixed;
       top: 0; left: 0; width: 100%; height: 100%;
-      background-color: rgba(0, 0, 0, 0.5);
+      background-color: rgba(0, 0, 0, 0.7);
       z-index: 1000;
       justify-content: center;
       align-items: center;
     }
 
     .modal-content {
-      background-color: #fff;
+      background-color: #2b1d0c;
+      border: 2px solid #7a5230;
+      color: #f3e5ab;
       padding: 25px;
       border-radius: 10px;
       width: 80%;
       max-width: 500px;
       max-height: 70vh;
       overflow-y: auto;
-      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
-      line-height: 1.6;
     }
 
     .modal-header {
       display: flex; justify-content: space-between; align-items: center;
-      border-bottom: 2px solid #ddd; padding-bottom: 10px; margin-bottom: 15px;
+      border-bottom: 2px solid #7a5230; padding-bottom: 10px; margin-bottom: 15px;
     }
 
-    .close-btn { font-size: 24px; font-weight: bold; cursor: pointer; border: none; background: none; }
+    .close-btn { font-size: 24px; font-weight: bold; cursor: pointer; border: none; background: none; color: #f3e5ab; }
     .rule-section { margin-bottom: 15px; }
-    .rule-section h4 { margin-bottom: 5px; color: #333; }
-    .rule-section p, .rule-section ul { margin: 0; padding-left: 20px; color: #555; }
+    .rule-section h4 { margin-bottom: 5px; color: #d4af37; }
+    .rule-section ul { margin: 0; padding-left: 20px; color: #e0d0b0; }
   </style>
 </head>
 <body>
   <div style="display: flex; justify-content: space-between; align-items: center;">
-    <h1>👑 온라인 달무티</h1>
+    <h1>👑 달무티 (The Great Dalmuti)</h1>
     <div>
       <button class="btn btn-revolution" id="rev-btn" style="display:none;" onclick="declareRevolution()">🔥 혁명 선언!</button>
       <button class="btn btn-rule" onclick="openRules()">📖 게임 규칙</button>
     </div>
   </div>
 
-  <div id="login-area">
-    <input type="text" id="nickname" placeholder="닉네임 입력">
+  <div id="login-area" style="margin-top:20px;">
+    <input type="text" id="nickname" placeholder="영지 이름을 입력하세요" style="padding: 8px; font-size:14px;">
     <button class="btn" onclick="join()">입장하기</button>
   </div>
 
   <div id="game-area" style="display:none;">
-    <h3>접속자 목록</h3>
-    <ul id="player-list"></ul>
+    <h3>영주 및 참가자 목록</h3>
+    <ul id="player-list" style="list-style: none; padding-left: 0;"></ul>
     
     <button class="btn" id="start-btn" onclick="startGame()">게임 시작</button>
 
-    <!-- 세금 징수 안내 구역 -->
-    <div id="tax-banner" style="display:none; background: #fff3cd; border: 1px solid #ffeeba; padding: 15px; border-radius: 5px; margin: 10px 0;">
+    <div id="tax-banner" style="display:none; background: #3e2723; border: 2px solid #d4af37; padding: 15px; border-radius: 8px; margin: 10px 0;">
       <h4>💰 세금 징수 단계</h4>
-      <p id="tax-status-text">농노들이 세금을 바쳤습니다. 달무티는 돌려줄 카드를 선택해 주세요.</p>
+      <p id="tax-status-text">농노들이 세금을 바쳤습니다. 돌려줄 카드를 선택해 주세요.</p>
       <button class="btn btn-tax" id="send-tax-btn" style="display:none;" onclick="returnTaxCards()">선택한 카드 농노에게 주기</button>
     </div>
 
     <div id="board">
-      <h4>현재 바닥에 깔린 카드:</h4>
-      <div id="last-card">없음</div>
+      <h4 style="color: #d4af37;">현재 바닥에 깔린 카드:</h4>
+      <div id="last-card" style="margin-top: 10px;">없음</div>
     </div>
 
-    <h3 id="turn-info"></h3>
+    <h3 id="turn-info" style="color: #ffc107;"></h3>
 
     <h4>내 손패 (<span id="my-title">평민</span>):</h4>
     <div id="my-hand"></div>
@@ -129,7 +180,7 @@
   <div id="rule-modal" class="modal-overlay">
     <div class="modal-content">
       <div class="modal-header">
-        <h2>📜 달무티 게임 규칙</h2>
+        <h2>📜 달무티 규칙서</h2>
         <button class="close-btn" onclick="closeRules()">&times;</button>
       </div>
 
@@ -137,25 +188,17 @@
         <h4>1. 🔥 혁명 (Revolution)</h4>
         <ul>
           <li>어리광대(🤡) 2장을 모두 쥔 사람은 세금 단계에서 <b>혁명</b>을 일으킬 수 있습니다.</li>
-          <li><b>일반 혁명:</b> 세금 징수가 즉시 무효화됩니다.</li>
-          <li><b>대혁명 (대농노의 혁명):</b> 모든 플레이어의 신분이 완벽히 반대로 역전됩니다!</li>
+          <li><b>일반 혁명:</b> 이번 라운드의 세금 징수가 전면 취소됩니다.</li>
+          <li><b>대혁명 (대농노의 혁명):</b> 모든 계급이 완벽하게 역전됩니다!</li>
         </ul>
       </div>
 
       <div class="rule-section">
         <h4>2. 🤡 어리광대(조커) 규칙</h4>
         <ul>
-          <li>다른 카드와 함께 낼 경우, <b>해당 숫자 카드로 변신</b>하여 함께 낼 수 있습니다. (예: 3번 2장 + 🤡 = 3번 3장)</li>
-          <li>단독으로 낼 때는 가장 낮은 계급(13번)으로 취급됩니다.</li>
-          <li>농노가 세금을 바칠 때 어리광대는 바칠 수 없습니다.</li>
-        </ul>
-      </div>
-
-      <div class="rule-section">
-        <h4>3. 세금 시스템 (신분 제도)</h4>
-        <ul>
-          <li><b>대달무티 (1등):</b> 대농노에게 가장 좋은 카드 2장을 받고, 원하지 않는 카드 2장을 넘겨줍니다.</li>
-          <li><b>소달무티 (2등):</b> 소농노에게 가장 좋은 카드 1장을 받고, 원하지 않는 카드 1장을 넘겨줍니다.</li>
+          <li>다른 카드와 함께 내면 <b>해당 숫자로 변신</b>합니다. (예: 5번 2장 + 🤡 = 5번 3장)</li>
+          <li>단독 제출 시 가장 나쁜 계급(13번) 카드 취급을 받습니다.</li>
+          <li>농노가 세금을 바칠 때는 어리광대를 바칠 수 없습니다.</li>
         </ul>
       </div>
 
@@ -170,7 +213,23 @@
     let selectedIndices = [];
     let myHandCards = [];
     let myRankTitle = '평민';
-    let currentPhase = 'WAITING';
+
+    // 원작 보드게임 직업 정보 맵팅
+    const CARD_INFO = {
+      1:  { title: "달무티", icon: "👑" },
+      2:  { title: "대주교", icon: "🍷" },
+      3:  { title: "시종장", icon: "📜" },
+      4:  { title: "남작", icon: "⚔️" },
+      5:  { title: "수녀원장", icon: "🕯️" },
+      6:  { title: "기사", icon: "🛡️" },
+      7:  { title: "재봉사", icon: "✂️" },
+      8:  { title: "석공", icon: "🔨" },
+      9:  { title: "방아꾼", icon: "🌾" },
+      10: { title: "농부", icon: "🧑‍🌾" },
+      11: { title: "채굴꾼", icon: "⛏️" },
+      12: { title: "농노", icon: "🧹" },
+      13: { title: "어리광대", icon: "🤡" }
+    };
 
     function openRules() { document.getElementById('rule-modal').style.display = 'flex'; }
     function closeRules() { document.getElementById('rule-modal').style.display = 'none'; }
@@ -190,14 +249,13 @@
     socket.on('updateRoom', (room) => {
       const list = document.getElementById('player-list');
       list.innerHTML = room.players.map(p => 
-        `<li>${p.name} <span class="badge ${p.rankTitle.includes('달무티')?'badge-달무티':p.rankTitle.includes('농노')?'badge-농노':''}">${p.rankTitle}</span></li>`
+        `<li style="margin: 5px 0;">${p.name} <span class="badge ${p.rankTitle.includes('달무티')?'badge-달무티':p.rankTitle.includes('농노')?'badge-농노':''}">${p.rankTitle}</span></li>`
       ).join('');
       
       document.getElementById('start-btn').style.display = room.gameStarted ? 'none' : 'inline-block';
     });
 
     socket.on('taxPhaseUpdate', (data) => {
-      currentPhase = 'TAX';
       document.getElementById('tax-banner').style.display = 'block';
       document.getElementById('play-controls').style.display = 'none';
 
@@ -205,7 +263,7 @@
       if (needsTaxReturn) {
         const needCount = myRankTitle === '대달무티' ? 2 : 1;
         document.getElementById('tax-status-text').innerText = 
-          `세금을 받았습니다! 농노에게 돌려줄 원하지 않는 카드 ${needCount}장을 선택해 주세요.`;
+          `세금을 징수했습니다! 농노에게 돌려줄 카드를 ${needCount}장 선택해 주세요.`;
         document.getElementById('send-tax-btn').style.display = 'inline-block';
       } else {
         document.getElementById('tax-status-text').innerText = '달무티와 농노 간 세금 교환 작업 진행 중...';
@@ -214,18 +272,18 @@
     });
 
     socket.on('turnUpdate', (data) => {
-      currentPhase = 'PLAYING';
       document.getElementById('tax-banner').style.display = 'none';
       document.getElementById('play-controls').style.display = 'block';
 
       document.getElementById('turn-info').innerText = `현재 차례: ${data.turnPlayerName}`;
       
       if (data.lastPlay) {
-        const cardDisplay = data.lastPlay.cards.map(c => `[${c === 13 ? '어리광대' : c}]`).join(' ');
+        const renderedCards = data.lastPlay.cards.map(c => createCardHTML(c, false)).join('');
         document.getElementById('last-card').innerHTML = 
-          `<b>${data.lastPlay.player}</b> 님이 냄: ${cardDisplay} (인정 계급: ${data.lastPlay.rank}, ${data.lastPlay.count}장)`;
+          `<div><b>${data.lastPlay.player}</b> 님이 제출 (인정 계급: <b>${CARD_INFO[data.lastPlay.rank].title}</b>, ${data.lastPlay.count}장):</div>
+           <div style="display:flex; flex-wrap:wrap; margin-top:5px;">${renderedCards}</div>`;
       } else {
-        document.getElementById('last-card').innerText = '선(새 라운드 시작)';
+        document.getElementById('last-card').innerText = '선(자유롭게 카드를 제출할 수 있습니다)';
       }
     });
 
@@ -233,38 +291,37 @@
       myHandCards = data.hand;
       myRankTitle = data.title;
       document.getElementById('my-title').innerText = myRankTitle;
-
-      // 혁명 버튼 노출 여부
-      if (data.canRevolution) {
-        document.getElementById('rev-btn').style.display = 'inline-block';
-      } else {
-        document.getElementById('rev-btn').style.display = 'none';
-      }
+      document.getElementById('rev-btn').style.display = data.canRevolution ? 'inline-block' : 'none';
 
       selectedIndices = [];
       renderMyHand();
     });
 
+    function createCardHTML(rank, clickable = true, index = -1) {
+      const info = CARD_INFO[rank] || { title: "알수없음", icon: "❓" };
+      const isSelected = selectedIndices.includes(index);
+      const clickAttr = clickable ? `onclick="toggleSelect(${index})"` : '';
+      
+      return `
+        <div class="card ${isSelected ? 'selected' : ''}" data-rank="${rank}" ${clickAttr}>
+          <div class="card-num">${rank === 13 ? '🤡' : rank}</div>
+          <div class="card-icon">${info.icon}</div>
+          <div class="card-title">${info.title}</div>
+        </div>
+      `;
+    }
+
     function renderMyHand() {
       const container = document.getElementById('my-hand');
-      container.innerHTML = '';
-      
-      myHandCards.forEach((cardRank, index) => {
-        const cardEl = document.createElement('div');
-        cardEl.className = 'card' + (selectedIndices.includes(index) ? ' selected' : '');
-        cardEl.innerText = cardRank === 13 ? '🤡' : cardRank;
-        cardEl.onclick = () => toggleSelect(index);
-        container.appendChild(cardEl);
-      });
+      container.style.display = 'flex';
+      container.style.flexWrap = 'wrap';
+      container.innerHTML = myHandCards.map((rank, index) => createCardHTML(rank, true, index)).join('');
     }
 
     function toggleSelect(index) {
       const pos = selectedIndices.indexOf(index);
-      if (pos > -1) {
-        selectedIndices.splice(pos, 1);
-      } else {
-        selectedIndices.push(index);
-      }
+      if (pos > -1) selectedIndices.splice(pos, 1);
+      else selectedIndices.push(index);
       renderMyHand();
     }
 
