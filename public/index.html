@@ -29,6 +29,13 @@
     .btn:hover { background: #eee; }
     .btn-rule { background: #4a90e2; color: white; border: none; font-weight: bold; }
     .btn-tax { background: #e67e22; color: white; border: none; font-weight: bold; }
+    .btn-revolution { background: #e74c3c; color: white; border: none; font-weight: bold; animation: pulse 1.5s infinite; }
+
+    @keyframes pulse {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.05); }
+      100% { transform: scale(1); }
+    }
 
     .badge {
       display: inline-block;
@@ -42,7 +49,6 @@
     .badge-달무티 { background: #f1c40f; color: #000; }
     .badge-농노 { background: #95a5a6; color: #fff; }
 
-    /* 모달 스타일 */
     .modal-overlay {
       display: none;
       position: fixed;
@@ -79,7 +85,10 @@
 <body>
   <div style="display: flex; justify-content: space-between; align-items: center;">
     <h1>👑 온라인 달무티</h1>
-    <button class="btn btn-rule" onclick="openRules()">📖 게임 규칙</button>
+    <div>
+      <button class="btn btn-revolution" id="rev-btn" style="display:none;" onclick="declareRevolution()">🔥 혁명 선언!</button>
+      <button class="btn btn-rule" onclick="openRules()">📖 게임 규칙</button>
+    </div>
   </div>
 
   <div id="login-area">
@@ -125,28 +134,28 @@
       </div>
 
       <div class="rule-section">
-        <h4>1. 세금 시스템 (신분 제도)</h4>
+        <h4>1. 🔥 혁명 (Revolution)</h4>
         <ul>
-          <li><b>대달무티 (1등):</b> 대농노에게 좋은 카드 2장을 받고, 원하지 않는 카드 2장을 넘겨줍니다.</li>
-          <li><b>소달무티 (2등):</b> 소농노에게 좋은 카드 1장을 받고, 원하지 않는 카드 1장을 넘겨줍니다.</li>
-          <li><b>농노:</b> 가진 카드 중 가장 좋은 카드(가장 작은 숫자)를 자동으로 상급자에게 헌납합니다.</li>
+          <li>어리광대(🤡) 2장을 모두 쥔 사람은 세금 단계에서 <b>혁명</b>을 일으킬 수 있습니다.</li>
+          <li><b>일반 혁명:</b> 세금 징수가 즉시 무효화됩니다.</li>
+          <li><b>대혁명 (대농노의 혁명):</b> 모든 플레이어의 신분이 완벽히 반대로 역전됩니다!</li>
         </ul>
       </div>
 
       <div class="rule-section">
-        <h4>2. 카드 구성 및 서열</h4>
+        <h4>2. 🤡 어리광대(조커) 규칙</h4>
         <ul>
-          <li>숫자가 <b>작을수록 높은 계급</b>입니다 (1번이 가장 높음).</li>
-          <li>🤡 어리광대(13번)는 2장 존재합니다.</li>
+          <li>다른 카드와 함께 낼 경우, <b>해당 숫자 카드로 변신</b>하여 함께 낼 수 있습니다. (예: 3번 2장 + 🤡 = 3번 3장)</li>
+          <li>단독으로 낼 때는 가장 낮은 계급(13번)으로 취급됩니다.</li>
+          <li>농노가 세금을 바칠 때 어리광대는 바칠 수 없습니다.</li>
         </ul>
       </div>
 
       <div class="rule-section">
-        <h4>3. 카드 내는 규칙</h4>
+        <h4>3. 세금 시스템 (신분 제도)</h4>
         <ul>
-          <li>선은 <b>동일한 숫자의 카드</b>를 1장 이상 낼 수 있습니다.</li>
-          <li>다음 사람은 앞 사람과 <b>동일한 장수</b> 및 <b>더 높은 계급(작은 숫자)</b>을 내야 합니다.</li>
-          <li>전원 패스 시 마지막으로 카드를 낸 사람이 선이 됩니다.</li>
+          <li><b>대달무티 (1등):</b> 대농노에게 가장 좋은 카드 2장을 받고, 원하지 않는 카드 2장을 넘겨줍니다.</li>
+          <li><b>소달무티 (2등):</b> 소농노에게 가장 좋은 카드 1장을 받고, 원하지 않는 카드 1장을 넘겨줍니다.</li>
         </ul>
       </div>
 
@@ -176,6 +185,7 @@
     }
 
     function startGame() { socket.emit('startGame'); }
+    function declareRevolution() { socket.emit('declareRevolution'); }
 
     socket.on('updateRoom', (room) => {
       const list = document.getElementById('player-list');
@@ -213,7 +223,7 @@
       if (data.lastPlay) {
         const cardDisplay = data.lastPlay.cards.map(c => `[${c === 13 ? '어리광대' : c}]`).join(' ');
         document.getElementById('last-card').innerHTML = 
-          `<b>${data.lastPlay.player}</b> 님이 냄: ${cardDisplay} (계급 ${data.lastPlay.rank}, ${data.lastPlay.count}장)`;
+          `<b>${data.lastPlay.player}</b> 님이 냄: ${cardDisplay} (인정 계급: ${data.lastPlay.rank}, ${data.lastPlay.count}장)`;
       } else {
         document.getElementById('last-card').innerText = '선(새 라운드 시작)';
       }
@@ -223,6 +233,14 @@
       myHandCards = data.hand;
       myRankTitle = data.title;
       document.getElementById('my-title').innerText = myRankTitle;
+
+      // 혁명 버튼 노출 여부
+      if (data.canRevolution) {
+        document.getElementById('rev-btn').style.display = 'inline-block';
+      } else {
+        document.getElementById('rev-btn').style.display = 'none';
+      }
+
       selectedIndices = [];
       renderMyHand();
     });
@@ -271,7 +289,7 @@
     }
 
     socket.on('errorMessage', (msg) => alert(msg));
-    socket.on('chat', (msg) => console.log(msg));
+    socket.on('chat', (msg) => alert(msg));
 
     socket.on('gameOver', (rankings) => {
       const rankMsg = rankings.map((r, i) => `${i + 1}등: ${r.name} (${r.title})`).join('\n');
