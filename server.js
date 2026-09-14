@@ -28,7 +28,9 @@ let room = {
   players: [], // { id, name, hand: [] }
   gameStarted: false,
   turnIndex: 0,
-  lastPlay: null,
+  lastPlay: null, // { player, rank, count, cards, playerId }
+  lastPlayPlayerId: null, // 마지막으로 카드를 낸 사람의 ID
+  passCount: 0, // 연속 패스 횟수
   finishedPlayers: []
 };
 
@@ -61,6 +63,8 @@ io.on('connection', (socket) => {
     room.gameStarted = true;
     room.finishedPlayers = [];
     room.lastPlay = null;
+    room.lastPlayPlayerId = null;
+    room.passCount = 0;
     room.turnIndex = 0;
 
     const deck = createDeck();
@@ -110,6 +114,10 @@ io.on('connection', (socket) => {
       }
     }
 
+    // 카드 제출 성공 시 패스 카운트 리셋 및 마지막 플레이어 갱신
+    room.passCount = 0;
+    room.lastPlayPlayerId = player.id;
+
     selectedCards.forEach(c => {
       const idx = player.hand.indexOf(c);
       if (idx > -1) player.hand.splice(idx, 1);
@@ -119,7 +127,8 @@ io.on('connection', (socket) => {
       player: player.name,
       rank: cardRank,
       count: selectedCards.length,
-      cards: selectedCards
+      cards: selectedCards,
+      playerId: player.id
     };
 
     if (player.hand.length === 0 && !room.finishedPlayers.includes(player.id)) {
@@ -136,9 +145,34 @@ io.on('connection', (socket) => {
     nextTurn();
   });
 
+  // 패스하기 로직
   socket.on('passTurn', () => {
     const playerIndex = room.players.findIndex(p => p.id === socket.id);
     if (playerIndex !== room.turnIndex) return;
+
+    // 카드가 한 번이라도 깔린 상태에서 패스한 경우
+    if (room.lastPlay) {
+      room.passCount++;
+      
+      // 손에 카드가 남은 사람 수 (아직 탈출 안 한 플레이어)
+      const activePlayers = room.players.filter(p => p.hand.length > 0);
+      
+      // 나를 제외한 모든 활동 중인 플레이어가 패스를 한 경우 (전원 패스)
+      if (room.passCount >= activePlayers.length - 1) {
+        io.emit('chat', '모두가 패스했습니다! 바닥 카드가 리셋되며 선에게 권한이 넘어갑니다.');
+        room.lastPlay = null; // 바닥 카드를 치우고 새로운 선 라운드 시작
+        room.passCount = 0;
+
+        // 마지막으로 카드를 낸 사람이 살아있다면 그 사람이 선, 이미 털고 나갔다면 다음 사람에게 넘김
+        const lastPlayerIndex = room.players.findIndex(p => p.id === room.lastPlayPlayerId);
+        if (lastPlayerIndex !== -1 && room.players[lastPlayerIndex].hand.length > 0) {
+          room.turnIndex = lastPlayerIndex;
+          notifyTurn();
+          return;
+        }
+      }
+    }
+
     nextTurn();
   });
 
