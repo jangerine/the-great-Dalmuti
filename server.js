@@ -27,15 +27,16 @@ function shuffle(array) {
 let room = {
   players: [], // { id, name, hand: [], rankTitle: '' }
   gameStarted: false,
-  phase: 'WAITING', // WAITING, TAX, PLAYING
+  phase: 'WAITING', // WAITING, REVOLUTION_CHECK, TAX, PLAYING
   turnIndex: 0,
   lastPlay: null,
   lastPlayPlayerId: null,
   passCount: 0,
-  finishedPlayers: [], // [id, id, ...] 등수 순서
+  finishedPlayers: [],
   taxState: {
-    pendingTax: [] // 세금 주고받기 상태 관리
-  }
+    pendingTax: []
+  },
+  revolutionDeclared: false
 };
 
 io.on('connection', (socket) => {
@@ -44,7 +45,12 @@ io.on('connection', (socket) => {
   socket.on('getMyHand', () => {
     const player = room.players.find(p => p.id === socket.id);
     if (player) {
-      socket.emit('updateMyHand', { hand: player.hand, phase: room.phase, title: player.rankTitle });
+      socket.emit('updateMyHand', { 
+        hand: player.hand, 
+        phase: room.phase, 
+        title: player.rankTitle,
+        canRevolution: hasTwoJesters(player.hand) && (room.phase === 'REVOLUTION_CHECK' || room.phase === 'TAX')
+      });
     }
   });
 
@@ -68,7 +74,33 @@ io.on('connection', (socket) => {
     startNewRound();
   });
 
-  // 세금 돌려주기 처리 (달무티가 농노에게 개똥같은 카드 돌려주기)
+  // 혁명 선언 처리
+  socket.on('declareRevolution', () => {
+    const player = room.players.find(p => p.id === socket.id);
+    if (!player || !hasTwoJesters(player.hand)) {
+      socket.emit('errorMessage', '어리광대 2장을 가지고 있지 않습니다.');
+      return;
+    }
+
+    room.revolutionDeclared = true;
+
+    // 대농노의 혁명 (대혁명: 모든 계급 반대로 역전)
+    if (player.rankTitle === '대농노') {
+      io.emit('chat', `🔥💥 [대혁명 발생!] ${player.name}(대농노) 님이 어리광대 2장으로 대혁명을 일으켰습니다! 모든 신분이 역전됩니다!`);
+      reverseAllRanks();
+    } else {
+      io.emit('chat', `⚡ [혁명 발생!] ${player.name} 님이 어리광대 2장으로 혁명을 일으켰습니다! 이번 라운드 세금이 면제됩니다.`);
+    }
+
+    // 세금 단계 건너뛰고 바로 게임 시작
+    room.phase = 'PLAYING';
+    const dalmutiIdx = room.players.findIndex(p => p.rankTitle === '대달무티');
+    room.turnIndex = dalmutiIdx !== -1 ? dalmutiIdx : 0;
+    
+    notifyTurn();
+  });
+
+  // 세금 돌려주기 처리
   socket.on('returnTaxCards', (selectedCards) => {
     const player = room.players.find(p => p.id === socket.id);
     if (!player) return;
@@ -82,7 +114,6 @@ io.on('connection', (socket) => {
       return;
     }
 
-    // 카드 이전 처리
     const targetTitle = player.rankTitle === '대달무티' ? '대농노' : '소농노';
     const targetPlayer = room.players.find(p => p.rankTitle === targetTitle);
 
@@ -101,7 +132,6 @@ io.on('connection', (socket) => {
       room.taxState.pendingTax = room.taxState.pendingTax.filter(t => t !== player.rankTitle);
     }
 
-    // 모든 세금 처리가 끝났는지 확인
     if (room.taxState.pendingTax.length === 0) {
       room.phase = 'PLAYING';
       io.emit('chat', '모든 세금 징수가 완료되었습니다! 라운드를 시작합니다.');
@@ -111,6 +141,7 @@ io.on('connection', (socket) => {
     }
   });
 
+  // 카드 제출 처리 (어리광대 조커 로직 포함)
   socket.on('playCards', (selectedCards) => {
     if (room.phase !== 'PLAYING') return;
 
@@ -123,20 +154,31 @@ io.on('connection', (socket) => {
     const player = room.players[playerIndex];
     if (!selectedCards || selectedCards.length === 0) return;
 
-    const cardRank = selectedCards[0];
-    const isValidSameRank = selectedCards.every(c => c === cardRank);
+    // 카드의 실질적인 계급 계산 (어리광대 검증)
+    const nonJesters = selectedCards.filter(c => c !== 13);
+    let effectiveRank = 13;
 
-    if (!isValidSameRank) {
-      socket.emit('errorMessage', '같은 카드로만 낼 수 있습니다.');
-      return;
+    if (nonJesters.length === 0) {
+      // 어리광대만 낸 경우
+      effectiveRank = 13;
+    } else {
+      // 일반 카드와 어리광대가 섞였거나 일반 카드만 있는 경우
+      const firstCard = nonJesters[0];
+      const isAllSameOrJester = nonJesters.every(c => c === firstCard);
+      if (!isAllSameOrJester) {
+        socket.emit('errorMessage', '어리광대를 섞어 낼 때는 한 종류의 카드만 조합해야 합니다.');
+        return;
+      }
+      effectiveRank = firstCard;
     }
 
+    // 선의 조건 검증
     if (room.lastPlay) {
       if (selectedCards.length !== room.lastPlay.count) {
         socket.emit('errorMessage', `카드를 ${room.lastPlay.count}장 내야 합니다.`);
         return;
       }
-      if (cardRank >= room.lastPlay.rank) {
+      if (effectiveRank >= room.lastPlay.rank) {
         socket.emit('errorMessage', `이전 카드(${room.lastPlay.rank})보다 낮은 숫자를 내야 합니다.`);
         return;
       }
@@ -152,7 +194,7 @@ io.on('connection', (socket) => {
 
     room.lastPlay = {
       player: player.name,
-      rank: cardRank,
+      rank: effectiveRank,
       count: selectedCards.length,
       cards: selectedCards,
       playerId: player.id
@@ -164,7 +206,6 @@ io.on('connection', (socket) => {
     }
 
     if (room.finishedPlayers.length >= room.players.length - 1) {
-      // 남아있는 마지막 꼴찌 추가
       const lastPlayer = room.players.find(p => !room.finishedPlayers.includes(p.id));
       if (lastPlayer) room.finishedPlayers.push(lastPlayer.id);
 
@@ -211,11 +252,16 @@ io.on('connection', (socket) => {
   });
 });
 
+function hasTwoJesters(hand) {
+  return hand.filter(c => c === 13).length === 2;
+}
+
 function startNewRound() {
   room.finishedPlayers = [];
   room.lastPlay = null;
   room.lastPlayPlayerId = null;
   room.passCount = 0;
+  room.revolutionDeclared = false;
 
   const deck = createDeck();
   let pCount = room.players.length;
@@ -231,11 +277,10 @@ function startNewRound() {
     player.hand.sort((a, b) => a - b);
   });
 
-  // 첫 판이 아니라 계급이 정해진 상태면 세금 계산 실행
   const hasRanks = room.players.some(p => p.rankTitle !== '평민');
 
   if (hasRanks && pCount >= 3) {
-    room.phase = 'TAX';
+    room.phase = 'REVOLUTION_CHECK';
     processAutomatedTax();
   } else {
     room.phase = 'PLAYING';
@@ -245,7 +290,6 @@ function startNewRound() {
   }
 }
 
-// 이전 판 등수 기반 계급 설정
 function updateRanks() {
   const count = room.finishedPlayers.length;
   room.finishedPlayers.forEach((id, idx) => {
@@ -259,14 +303,25 @@ function updateRanks() {
     else player.rankTitle = '평민';
   });
 
-  // 대달무티가 0번 인덱스(선)가 되도록 순서 배치
   const grandDalmutiIndex = room.players.findIndex(p => p.rankTitle === '대달무티');
   if (grandDalmutiIndex !== -1) {
     room.turnIndex = grandDalmutiIndex;
   }
 }
 
-// 농노들의 자동 세금 헌납 로직
+function reverseAllRanks() {
+  const rankOrder = ['대달무티', '소달무티', '평민', '소농노', '대농노'];
+  const reversedOrder = ['대농노', '소농노', '평민', '소달무티', '대달무티'];
+
+  room.players.forEach(p => {
+    const idx = rankOrder.indexOf(p.rankTitle);
+    if (idx !== -1) {
+      p.rankTitle = reversedOrder[idx];
+    }
+  });
+}
+
+// 농노의 세금 자동 납부 (어리광대는 제출 제외 처리)
 function processAutomatedTax() {
   room.taxState.pendingTax = [];
 
@@ -275,22 +330,37 @@ function processAutomatedTax() {
   const littleDalmuti = room.players.find(p => p.rankTitle === '소달무티');
   const littlePeasant = room.players.find(p => p.rankTitle === '소농노');
 
-  // 대농노 -> 대달무티 (가장 좋은 카드 2장 바침)
+  // 농노의 가장 좋은 카드 뽑기 (어리광대 13 제외한 오름차순 카드)
+  function extractBestCards(player, count) {
+    let extracted = [];
+    let remainingHand = [];
+    
+    // 일반 카드 우선
+    let normalCards = player.hand.filter(c => c !== 13).sort((a, b) => a - b);
+    let jesters = player.hand.filter(c => c === 13);
+
+    extracted = normalCards.slice(0, count);
+    remainingHand = normalCards.slice(count).concat(jesters);
+
+    player.hand = remainingHand.sort((a, b) => a - b);
+    return extracted;
+  }
+
   if (grandDalmuti && grandPeasant) {
-    const bestCards = grandPeasant.hand.splice(0, 2); // 1번 쪽에 가까운 가장 작은 카드 2장
+    const bestCards = extractBestCards(grandPeasant, 2);
     grandDalmuti.hand.push(...bestCards);
     grandDalmuti.hand.sort((a, b) => a - b);
     room.taxState.pendingTax.push('대달무티');
   }
 
-  // 소농노 -> 소달무티 (가장 좋은 카드 1장 바침)
   if (littleDalmuti && littlePeasant) {
-    const bestCard = littlePeasant.hand.splice(0, 1);
+    const bestCard = extractBestCards(littlePeasant, 1);
     littleDalmuti.hand.push(...bestCard);
     littleDalmuti.hand.sort((a, b) => a - b);
     room.taxState.pendingTax.push('소달무티');
   }
 
+  room.phase = 'TAX';
   notifyTaxPhase();
 }
 
@@ -301,7 +371,12 @@ function notifyTaxPhase() {
   });
 
   room.players.forEach(p => {
-    io.to(p.id).emit('updateMyHand', { hand: p.hand, phase: 'TAX', title: p.rankTitle });
+    io.to(p.id).emit('updateMyHand', { 
+      hand: p.hand, 
+      phase: 'TAX', 
+      title: p.rankTitle,
+      canRevolution: hasTwoJesters(p.hand)
+    });
   });
 }
 
@@ -322,7 +397,12 @@ function notifyTurn() {
   });
 
   room.players.forEach(p => {
-    io.to(p.id).emit('updateMyHand', { hand: p.hand, phase: 'PLAYING', title: p.rankTitle });
+    io.to(p.id).emit('updateMyHand', { 
+      hand: p.hand, 
+      phase: 'PLAYING', 
+      title: p.rankTitle,
+      canRevolution: false
+    });
   });
 }
 
