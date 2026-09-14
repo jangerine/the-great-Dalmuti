@@ -8,7 +8,6 @@ const io = new Server(server);
 
 app.use(express.static('public'));
 
-// 달무티 카드 덱 생성 (1번 1장, 2번 2장, ... 12번 12장, 어리광대 13번 2장)
 function createDeck() {
   let deck = [];
   for (let i = 1; i <= 12; i++) {
@@ -29,14 +28,21 @@ let room = {
   players: [], // { id, name, hand: [] }
   gameStarted: false,
   turnIndex: 0,
-  lastPlay: null, // { cards: [], rank: number, count: number }
+  lastPlay: null,
   finishedPlayers: []
 };
 
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
 
-  // 플레이어 입장
+  // 현재 내 손패 요청 처리
+  socket.on('getMyHand', () => {
+    const player = room.players.find(p => p.id === socket.id);
+    if (player) {
+      socket.emit('updateMyHand', player.hand);
+    }
+  });
+
   socket.on('joinGame', (nickname) => {
     if (room.gameStarted) {
       socket.emit('errorMessage', '이미 게임이 시작되었습니다.');
@@ -46,8 +52,8 @@ io.on('connection', (socket) => {
     io.emit('updateRoom', room);
   });
 
-  // 게임 시작
   socket.on('startGame', () => {
+    if (room.gameStarted) return;
     if (room.players.length < 3) {
       socket.emit('errorMessage', '최소 3명 이상이어야 시작할 수 있습니다.');
       return;
@@ -61,7 +67,6 @@ io.on('connection', (socket) => {
     const deck = createDeck();
     let pCount = room.players.length;
 
-    // 카드 분배
     room.players.forEach((player) => {
       player.hand = [];
     });
@@ -69,7 +74,6 @@ io.on('connection', (socket) => {
       room.players[idx % pCount].hand.push(card);
     });
 
-    // 손패 정렬 (오름차순)
     room.players.forEach((player) => {
       player.hand.sort((a, b) => a - b);
     });
@@ -78,7 +82,6 @@ io.on('connection', (socket) => {
     notifyTurn();
   });
 
-  // 카드 제출
   socket.on('playCards', (selectedCards) => {
     const playerIndex = room.players.findIndex(p => p.id === socket.id);
     if (playerIndex !== room.turnIndex) {
@@ -87,9 +90,8 @@ io.on('connection', (socket) => {
     }
 
     const player = room.players[playerIndex];
-    if (selectedCards.length === 0) return;
+    if (!selectedCards || selectedCards.length === 0) return;
 
-    // 규칙 검증: 모든 카드가 같은 숫자인지 (어리광대 규칙은 일단 기본 숫자 적용)
     const cardRank = selectedCards[0];
     const isValidSameRank = selectedCards.every(c => c === cardRank);
 
@@ -98,7 +100,6 @@ io.on('connection', (socket) => {
       return;
     }
 
-    // 선의 요구사항 검증
     if (room.lastPlay) {
       if (selectedCards.length !== room.lastPlay.count) {
         socket.emit('errorMessage', `카드를 ${room.lastPlay.count}장 내야 합니다.`);
@@ -110,13 +111,11 @@ io.on('connection', (socket) => {
       }
     }
 
-    // 플레이어 손에서 카드 제거
     selectedCards.forEach(c => {
       const idx = player.hand.indexOf(c);
       if (idx > -1) player.hand.splice(idx, 1);
     });
 
-    // 필드 업데이트
     room.lastPlay = {
       player: player.name,
       rank: cardRank,
@@ -124,32 +123,26 @@ io.on('connection', (socket) => {
       cards: selectedCards
     };
 
-    // 손패를 다 턴 경우
     if (player.hand.length === 0 && !room.finishedPlayers.includes(player.id)) {
       room.finishedPlayers.push(player.id);
-      io.emit('chat', `${player.name} 님이 탈출했습니다! (${room.finishedPlayers.length}등)`);
+      io.emit('chat', `${player.name} 님이 탈출했습니다!`);
     }
 
-    // 게임 종료 확인
     if (room.finishedPlayers.length >= room.players.length - 1) {
       io.emit('gameOver', room.finishedPlayers);
       room.gameStarted = false;
       return;
     }
 
-    // 다음 차례 이동
     nextTurn();
   });
 
-  // 패스하기
   socket.on('passTurn', () => {
     const playerIndex = room.players.findIndex(p => p.id === socket.id);
     if (playerIndex !== room.turnIndex) return;
-
     nextTurn();
   });
 
-  // 퇴장 처리
   socket.on('disconnect', () => {
     room.players = room.players.filter(p => p.id !== socket.id);
     io.emit('updateRoom', room);
@@ -159,16 +152,22 @@ io.on('connection', (socket) => {
 function nextTurn() {
   do {
     room.turnIndex = (room.turnIndex + 1) % room.players.length;
-  } while (room.players[room.turnIndex].hand.length === 0); // 이미 탈출한 사람은 스킵
+  } while (room.players[room.turnIndex].hand.length === 0);
 
   notifyTurn();
 }
 
 function notifyTurn() {
   io.emit('turnUpdate', {
-    turnPlayer: room.players[room.turnIndex],
+    turnPlayerId: room.players[room.turnIndex].id,
+    turnPlayerName: room.players[room.turnIndex].name,
     lastPlay: room.lastPlay,
     players: room.players.map(p => ({ name: p.name, cardCount: p.hand.length, id: p.id }))
+  });
+
+  // 모든 플레이어에게 각자의 최신 손패를 전송
+  room.players.forEach(p => {
+    io.to(p.id).emit('updateMyHand', p.hand);
   });
 }
 
