@@ -140,12 +140,13 @@
           <li>다음 사람은 앞 사람이 낸 카드와 <b>동일한 장수</b>의 카드를 내야 합니다.</li>
           <li>다음 사람은 앞 사람이 낸 카드보다 <b>더 높은 계급(더 작은 숫자)</b>의 카드만 낼 수 있습니다.</li>
           <li>낼 카드가 없거나 내고 싶지 않다면 <b>패스</b>할 수 있습니다.</li>
+          <li>모든 플레이어가 패스하면 마지막으로 카드를 낸 사람이 선이 되어 다시 원하는 조합으로 새로 시작합니다.</li>
         </ul>
       </div>
 
       <div class="rule-section">
         <h4>4. 라운드 종료 및 승리</h4>
-        <p>모든 플레이어가 패스하고 마지막으로 카드를 낸 사람에게 선 권한이 넘어가며 새 라운드가 시작됩니다. 가장 먼저 손패를 털어낸 순서대로 등수가 결정됩니다.</p>
+        <p>가장 먼저 손패를 털어낸 순서대로 등수가 결정됩니다.</p>
       </div>
 
       <div style="text-align: right; margin-top: 20px;">
@@ -159,7 +160,6 @@
     let selectedIndices = [];
     let myHandCards = [];
 
-    // 규칙 모달 열기 / 닫기
     function openRules() {
       document.getElementById('rule-modal').style.display = 'flex';
     }
@@ -168,7 +168,6 @@
       document.getElementById('rule-modal').style.display = 'none';
     }
 
-    // 모달 바깥 배경 클릭 시 닫기
     window.onclick = function(event) {
       const modal = document.getElementById('rule-modal');
       if (event.target === modal) {
@@ -261,6 +260,10 @@
 
     socket.on('errorMessage', (msg) => {
       alert(msg);
+    });
+
+    socket.on('chat', (msg) => {
+      console.log(msg);
     });
 
     socket.on('gameOver', (rankings) => {
