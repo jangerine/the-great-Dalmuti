@@ -35,7 +35,6 @@ let room = {
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
 
-  // 현재 내 손패 요청 처리
   socket.on('getMyHand', () => {
     const player = room.players.find(p => p.id === socket.id);
     if (player) {
@@ -165,7 +164,6 @@ function notifyTurn() {
     players: room.players.map(p => ({ name: p.name, cardCount: p.hand.length, id: p.id }))
   });
 
-  // 모든 플레이어에게 각자의 최신 손패를 전송
   room.players.forEach(p => {
     io.to(p.id).emit('updateMyHand', p.hand);
   });
